@@ -6,16 +6,12 @@ permissions:
   pages: write
   id-token: write
 
-defaults:
-  run:
-    working-directory: wokwi
-
 env:
-  OPENLANE_TAG:   2022.02.23_02.50.41
-  OPENLANE_IMAGE_NAME:    efabless/openlane:$(OPENLANE_TAG)
-  OPENLANE_ROOT:  /home/runner/openlane
-  PDK_ROOT:       /home/runner/pdk
-  PDK:            sky130A
+  OPENLANE_TAG:         2022.02.23_02.50.41
+  OPENLANE_IMAGE_NAME:  efabless/openlane:$(OPENLANE_TAG)
+  OPENLANE_ROOT:        /home/runner/openlane
+  PDK_ROOT:             /home/runner/pdk
+  PDK:                  sky130A
   # Verilator pinned against the cocotb compatible version
   VERILATOR_TAG:        4.106
   VERILATOR_IMAGE_NAME: verilator/verilator:$(VERILATOR_TAG)
@@ -29,6 +25,46 @@ jobs:
     - name: checkout repo
       uses: actions/checkout@v2
 
+    # fetch the Verilog from Wokwi API
+    - name: fetch Verilog
+      run: make fetch
+
+    # Save the checked out workspace for other jobs to grab
+    - uses: actions/upload-artifact@v3
+      with:
+        name: workarea
+        path: |
+          ./
+          !./.git
+
+  lint:
+    # ubuntu
+    runs-on: ubuntu-latest
+    needs: [bootstrap]
+    steps:
+    # Grab the checked out workspace
+    - uses: actions/download-artifact@v3
+      with:
+        name: workarea
+
+    # run lint to check for gross problems
+    - name: lint Verilog
+      run: |
+        echo "Linting in directory: $(pwd)"
+        ls
+        touch hello234
+        make lint LINT_USE_DOCKER=yes LINT_DOCKER_TAG=$VERILATOR_TAG LINT_DOCKER_IMG=$VERILATOR_IMAGE_NAME
+
+  gds:
+    # ubuntu
+    runs-on: ubuntu-latest
+    needs: [bootstrap]
+    steps:
+    # Grab the checked out workspace
+    - uses: actions/download-artifact@v3
+      with:
+        name: workarea
+
     # build PDK and fetch OpenLane
     - name: pdk & caravel
       run: |
@@ -37,24 +73,6 @@ jobs:
         cd caravel_user_project
         make setup
 
-    # fetch the Verilog from Wokwi API
-    - name: fetch Verilog
-      run: make fetch
-
-  lint:
-    # ubuntu
-    runs-on: ubuntu-latest
-    needs: [bootstrap]
-    steps:
-    # run lint to check for gross problems
-    - name: lint Verilog
-      run: make lint LINT_USE_DOCKER=yes LINT_DOCKER_TAG=$VERILATOR_TAG LINT_DOCKER_IMG=$VERILATOR_IMAGE_NAME
-
-  gds:
-    # ubuntu
-    runs-on: ubuntu-latest
-    needs: [bootstrap]
-    steps:
     # run the 'harden' rule in the Makefile to use OpenLane to build the GDS
     - name: make GDS
       run: make harden
