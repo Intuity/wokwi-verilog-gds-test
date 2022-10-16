@@ -25,27 +25,54 @@ jobs:
     - name: checkout repo
       uses: actions/checkout@v2
 
+    # build PDK and fetch OpenLane
+    - name: pdk & caravel
+      run: |
+        cd $HOME
+        git clone https://github.com/efabless/caravel_user_project.git -b mpw-6c
+        cd caravel_user_project
+        make setup
+
     # fetch the Verilog from Wokwi API
     - name: fetch Verilog
       run: make fetch
 
-    # Save the checked out workspace for other jobs to grab
-    - uses: actions/upload-artifact@v3
+    # Cache 'src' (fetched Verilog)
+    - name: Populate 'src' cache
+      uses: actions/cache@v2
       with:
-        name: workarea
-        path: |
-          ./
-          !./.git
+        path: src
+        key: ${{ runner.os }}-src-${{ github.run_id }}
+
+    # Cache OpenLane
+    - name: Populate PDK & Caravel cache
+      uses: actions/cache@v2
+      with:
+        path: $HOME/caravel_user_project
+        key: ${{ runner.os }}-pdk-${{ github.run_id }}
 
   lint:
     # ubuntu
     runs-on: ubuntu-latest
     needs: [bootstrap]
     steps:
-    # Grab the checked out workspace
-    - uses: actions/download-artifact@v3
+    # need the repo checked out
+    - name: checkout repo
+      uses: actions/checkout@v2
+
+    # Retrieve cached 'src'
+    - name: Restore 'src' cache
+      uses: actions/cache@v2
       with:
-        name: workarea
+        path: src
+        key: ${{ runner.os }}-src-${{ github.run_id }}
+
+    # Retrieve cached OpenLane
+    - name: Populate PDK & Caravel cache
+      uses: actions/cache@v2
+      with:
+        path: $HOME/caravel_user_project
+        key: ${{ runner.os }}-pdk-${{ github.run_id }}
 
     # run lint to check for gross problems
     - name: lint Verilog
@@ -60,18 +87,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [bootstrap]
     steps:
-    # Grab the checked out workspace
-    - uses: actions/download-artifact@v3
-      with:
-        name: workarea
-
-    # build PDK and fetch OpenLane
-    - name: pdk & caravel
-      run: |
-        cd $HOME
-        git clone https://github.com/efabless/caravel_user_project.git -b mpw-6c
-        cd caravel_user_project
-        make setup
+    # need the repo checked out
+    - name: checkout repo
+      uses: actions/checkout@v2
 
     # run the 'harden' rule in the Makefile to use OpenLane to build the GDS
     - name: make GDS
@@ -97,12 +115,6 @@ jobs:
             print(f'| { "|".join(["-----"] * len(keys)) } |')
             print(f'| { "|".join(report[k] for k in keys) } |')
         EOF
-
-    - name: populate src cache
-      uses: actions/cache@v2
-      with:
-        path: src
-        key: ${{ runner.os }}-src-${{ github.run_id }}
 
     - name: populate runs cache
       uses: actions/cache@v2
